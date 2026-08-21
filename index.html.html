@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stack → PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --ink: #1c1b19;
+    --ink-soft: #26241f;
+    --paper: #f6f2e8;
+    --paper-dim: #cfc8b8;
+    --graphite: #8a8477;
+    --safelight: #c1442d;
+    --safelight-dim: #8a3223;
+    --glow: radial-gradient(ellipse 60% 45% at 50% 0%, rgba(193,68,45,0.16), transparent 70%);
+  }
+  * { box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--ink);
+    background-image: var(--glow);
+    color: var(--paper);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    min-height: 100vh;
+    padding: 48px 24px 96px;
+  }
+  .wrap{ max-width: 920px; margin: 0 auto; }
+
+  header{ margin-bottom: 40px; }
+  .eyebrow{
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--safelight);
+    margin: 0 0 10px;
+  }
+  h1{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 700;
+    font-size: clamp(32px, 5vw, 48px);
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    color: var(--paper);
+  }
+  header p{
+    color: var(--graphite);
+    font-size: 15px;
+    max-width: 480px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .dropzone{
+    border: 1.5px dashed var(--paper-dim);
+    border-radius: 4px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+    background: rgba(255,255,255,0.02);
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color: var(--safelight);
+    background: rgba(193,68,45,0.06);
+  }
+  .dropzone .dz-title{
+    font-family: Georgia, serif;
+    font-size: 18px;
+    color: var(--paper);
+    margin-bottom: 6px;
+  }
+  .dropzone .dz-sub{
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--graphite);
+    letter-spacing: 0.04em;
+  }
+  input[type=file]{ display:none; }
+
+  .table-label{
+    display:flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 40px 0 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--graphite);
+  }
+  .table-label span.count{ color: var(--paper); }
+
+  .stack{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 18px;
+  }
+  .empty-hint{
+    color: var(--graphite);
+    font-size: 14px;
+    font-style: italic;
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 24px 0;
+  }
+
+  .print{
+    position: relative;
+    background: var(--paper);
+    padding: 8px 8px 20px;
+    border-radius: 2px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.04) inset;
+    cursor: grab;
+    transform: rotate(var(--r, 0deg));
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .print:hover{
+    transform: rotate(0deg) translateY(-3px);
+    box-shadow: 0 10px 22px rgba(0,0,0,0.45);
+  }
+  .print.dragging{ opacity: 0.35; }
+  .print.drag-over{ outline: 2px dashed var(--safelight); outline-offset: 3px; }
+
+  .print img{
+    display:block;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    background: var(--ink-soft);
+  }
+  .print .num{
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--safelight);
+    color: var(--paper);
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  }
+  .print .remove{
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper-dim);
+    border: 1px solid var(--paper-dim);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .print .remove:hover{ color: var(--safelight); border-color: var(--safelight); }
+  .print .fname{
+    margin-top: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .bindery{
+    position: sticky;
+    bottom: 20px;
+    margin-top: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--ink-soft);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    padding: 16px 20px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  }
+  .bindery .status{
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--graphite);
+  }
+  .bindery .status b{ color: var(--paper); }
+
+  select, button.export{
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  select{
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--paper-dim);
+    border-radius: 4px;
+    padding: 8px 10px;
+  }
+  button.export{
+    background: var(--safelight);
+    color: var(--paper);
+    border: none;
+    border-radius: 4px;
+    padding: 12px 24px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background .15s ease, transform .1s ease;
+  }
+  button.export:hover:not(:disabled){ background: var(--safelight-dim); }
+  button.export:disabled{ opacity: 0.35; cursor: not-allowed; }
+  button.export:active:not(:disabled){ transform: scale(0.98); }
+
+  .controls-left{ display:flex; align-items:center; gap: 12px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .print, .dropzone, button.export{ transition: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Light table / 01</p>
+      <h1>Stack your prints,<br>bind them into a PDF.</h1>
+      <p>Drop in your images, drag to set the order, then bind the stack into a single PDF. Nothing leaves your browser.</p>
+    </header>
+
+    <div class="dropzone" id="dropzone">
+      <div class="dz-title">Drop images here, or click to choose</div>
+      <div class="dz-sub">JPG · PNG · WEBP — any number, any size</div>
+      <input type="file" id="fileInput" accept="image/*" multiple>
+    </div>
+
+    <div class="table-label">
+      <span>On the table</span>
+      <span class="count" id="count">0 prints</span>
+    </div>
+
+    <div class="stack" id="stack">
+      <div class="empty-hint" id="emptyHint">The table is empty — add some prints above.</div>
+    </div>
+
+    <div class="bindery">
+      <div class="controls-left">
+        <select id="pageSize">
+          <option value="fit">Fit page to image</option>
+          <option value="a4">A4</option>
+          <option value="letter">Letter</option>
+        </select>
+        <span class="status" id="status"><b>0</b> ready to bind</span>
+      </div>
+      <button class="export" id="exportBtn" disabled>Bind to PDF</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const stackEl = document.getElementById('stack');
+  const emptyHint = document.getElementById('emptyHint');
+  const countEl = document.getElementById('count');
+  const statusEl = document.getElementById('status');
+  const exportBtn = document.getElementById('exportBtn');
+  const pageSizeSel = document.getElementById('pageSize');
+
+  let items = []; // {id, file, url, name}
+  let dragSrcId = null;
+  let idSeq = 0;
+
+  function rand(seed){
+    // small deterministic-ish jitter per card
+    const x = Math.sin(seed * 999) * 10000;
+    return (x - Math.floor(x)) * 4 - 2; // -2..2 deg
+  }
+
+  function updateStatus(){
+    const n = items.length;
+    countEl.textContent = n + (n === 1 ? ' print' : ' prints');
+    statusEl.innerHTML = '<b>' + n + '</b> ready to bind';
+    exportBtn.disabled = n === 0;
+    emptyHint.style.display = n === 0 ? 'block' : 'none';
+  }
+
+  function addFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    files.forEach(file => {
+      const id = 'p' + (idSeq++);
+      const url = URL.createObjectURL(file);
+      items.push({ id, file, url, name: file.name });
+    });
+    render();
+  }
+
+  function render(){
+    stackEl.querySelectorAll('.print').forEach(el => el.remove());
+    items.forEach((item, i) => {
+      const card = document.createElement('div');
+      card.className = 'print';
+      card.draggable = true;
+      card.dataset.id = item.id;
+      card.style.setProperty('--r', rand(i + 1).toFixed(2) + 'deg');
+
+      const num = document.createElement('div');
+      num.className = 'num';
+      num.textContent = i + 1;
+
+      const remove = document.createElement('div');
+      remove.className = 'remove';
+      remove.textContent = '×';
+      remove.title = 'Remove';
+      remove.addEventListener('click', (e) => {
+        e.stopPropagation();
+        items = items.filter(it => it.id !== item.id);
+        URL.revokeObjectURL(item.url);
+        render();
+      });
+
+      const img = document.createElement('img');
+      img.src = item.url;
+      img.alt = item.name;
+
+      const fname = document.createElement('div');
+      fname.className = 'fname';
+      fname.textContent = item.name;
+
+      card.appendChild(num);
+      card.appendChild(remove);
+      card.appendChild(img);
+      card.appendChild(fname);
+
+      card.addEventListener('dragstart', () => {
+        dragSrcId = item.id;
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        stackEl.querySelectorAll('.print').forEach(c => c.classList.remove('drag-over'));
+      });
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        card.classList.add('drag-over');
+      });
+      card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        card.classList.remove('drag-over');
+        if (!dragSrcId || dragSrcId === item.id) return;
+        const fromIdx = items.findIndex(it => it.id === dragSrcId);
+        const toIdx = items.findIndex(it => it.id === item.id);
+        const [moved] = items.splice(fromIdx, 1);
+        items.splice(toIdx, 0, moved);
+        dragSrcId = null;
+        render();
+      });
+
+      stackEl.appendChild(card);
+    });
+    updateStatus();
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+
+  ['dragenter', 'dragover'].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.add('drag');
+    });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('drag');
+    });
+  });
+  dropzone.addEventListener('drop', (e) => {
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      addFiles(e.dataTransfer.files);
+    }
+  });
+
+  function loadImage(url){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  exportBtn.addEventListener('click', async () => {
+    if (items.length === 0) return;
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Binding…';
+
+    try {
+      const { jsPDF } = window.jspdf;
+      const mode = pageSizeSel.value;
+      let pdf = null;
+
+      for (let i = 0; i < items.length; i++) {
+        const img = await loadImage(items[i].url);
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        const orientation = w >= h ? 'l' : 'p';
+
+        let pageFormat;
+        if (mode === 'fit') {
+          pageFormat = [w, h];
+        } else if (mode === 'a4') {
+          pageFormat = 'a4';
+        } else {
+          pageFormat = 'letter';
+        }
+
+        if (!pdf) {
+          pdf = new jsPDF({
+            orientation: mode === 'fit' ? orientation : orientation,
+            unit: mode === 'fit' ? 'px' : 'pt',
+            format: pageFormat
+          });
+        } else {
+          pdf.addPage(pageFormat, orientation);
+        }
+
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+
+        let drawW, drawH;
+        if (mode === 'fit') {
+          drawW = pageW;
+          drawH = pageH;
+        } else {
+          const scale = Math.min(pageW / w, pageH / h);
+          drawW = w * scale;
+          drawH = h * scale;
+        }
+        const x = (pageW - drawW) / 2;
+        const y = (pageH - drawH) / 2;
+
+        const fmt = items[i].name.toLowerCase().endsWith('.png') ? 'PNG' : 'JPEG';
+        pdf.addImage(img, fmt, x, y, drawW, drawH, undefined, 'FAST');
+      }
+
+      pdf.save('stack.pdf');
+    } catch (err) {
+      console.error(err);
+      alert('Something went wrong binding the PDF: ' + err.message);
+    } finally {
+      exportBtn.disabled = items.length === 0;
+      exportBtn.textContent = 'Bind to PDF';
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
